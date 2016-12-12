@@ -159,6 +159,7 @@ HashMap<K, V, F>& HashMap<K, V, F>::operator=(HashMap &other)
             }
         }
     }
+    return *this;
 }
 
 //
