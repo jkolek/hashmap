@@ -1,7 +1,7 @@
 // The MIT License (MIT)
 //
 // Thread-safe generic hashmap
-// Copyright (c) 2016-2017 Jozef Kolek <jkolek@gmail.com>
+// Copyright (c) 2016, 2017 Jozef Kolek <jkolek@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,45 +28,38 @@
 #include <mutex>
 
 template <class K, class V, class F>
-class HashMapIter;
-
-template <class K, class V>
-class HashMapElement
-{
-    K _key;
-    V _value;
-public:
-    HashMapElement(K key, V value) : _key(key), _value(value) {}
-
-    K getKey() { return _key; }
-    V getValue() { return _value; }
-    void setValue(V value) { _value = value; }
-
-    HashMapElement<K, V> *next = nullptr;
-};
-
-template <class K, class V, class F>
 class HashMap
 {
+public:
+    struct Element
+    {
+        K key;
+        V value;
+        Element *next = nullptr;
+
+        Element(K k, V v) : key(k), value(v) {}
+    };
+
+private:
     // Table size
     size_t _size;
 
     //
-    // The table elements are pointers to HashMapElement. Table contains linked
+    // The table elements are pointers to Element. Table contains linked
     // lists where elements of the list represents entries with key-value pairs.
     //
-    HashMapElement<K, V> **_table;
+    Element **_table;
 
     //
-    // We have one mutex for each index of table, so multiple indexes can be
+    // We have one mutex for each _index of table, so multiple indexes can be
     // accessed at the same time.
     //
     std::mutex **_mutexes;
 
     //
     // Hash function is actually a class used as functor. This function
-    // calculates an index where an element needs to be stored. The calculated
-    // index is modulo of MAX_TABLE_SIZE.
+    // calculates an _index where an element needs to be stored. The calculated
+    // _index is modulo of MAX_TABLE_SIZE.
     //
     F hashFunctor;
 
@@ -87,7 +80,7 @@ public:
     void resize(size_t newSize);
     void print();
     size_t getSize() { return _size; }
-    HashMapElement<K, V> **getTable() { return _table; }
+    Element **getTable() { return _table; }
 
     HashMap() : _size(0), _table(nullptr), _mutexes(nullptr) {}
     HashMap(size_t Size);
@@ -97,71 +90,94 @@ public:
     HashMap& operator=(HashMap &other);  // Copy assignment operator
     HashMap& operator=(HashMap &&other); // Move assignment operator
 
-    HashMapIter<K, V, F> *createIterator()
+    // Indexed access of HashMap elements
+    // T & operator[](int n) { return _data[n]; }
+    V operator[](K key) const { return lookup(key); }
+
+    //
+    // Iterator class
+    //
+    class Iterator
     {
-        return new HashMapIter<K, V, F>(this);
-    }
-};
+        HashMap<K, V, F> *_map;
+        Element *_current = nullptr;
+        unsigned _index = 0;
 
-//
-// HashMap Iterator class
-//
-template <class K, class V, class F>
-class HashMapIter
-{
-    HashMap<K, V, F> *_map;
-    HashMapElement<K, V> *_curr = nullptr;
-    unsigned _idx = 0;
-public:
-    HashMapIter(HashMap<K, V, F> *map) : _map(map) {}
-
-    void first()
-    {
-        size_t size = _map->getSize();
-        _idx = 0;
-        while (_idx < size && _map->getTable()[_idx] == nullptr)
-            _idx++;
-        if (_idx < size)
-            _curr = _map->getTable()[_idx];
-        else
-            _curr = nullptr;
-    }
-
-    void next()
-    {
-        if (_curr == nullptr)
-            return;
-
-        if (_curr->next == nullptr)
+        void next()
         {
-            size_t size = _map->getSize();
+            if (_current == nullptr)
+                return;
 
-            do
+            if (_current->next == nullptr)
             {
-                _idx++;
+                size_t size = _map->getSize();
+
+                // Find a next element in the table different then nullptr
+                do
+                {
+                    ++_index;
+                }
+                while (_index < size && _map->getTable()[_index] == nullptr);
+
+                if (_index < size)
+                    _current = _map->getTable()[_index];
+                else
+                    _current = nullptr;
             }
-            while (_idx < size && _map->getTable()[_idx] == nullptr);
-
-            if (_idx < size)
-                _curr = _map->getTable()[_idx];
             else
-                _curr = nullptr;
+            {
+                _current = _current->next;
+            }
         }
-        else
+
+    public:
+        Iterator() {}
+        Iterator(HashMap<K, V, F> *map, Element *current)
+            : _map(map), _current(current) {}
+
+        // Prefix increment operator
+        Iterator & operator++()
         {
-            _curr = _curr->next;
+            next();
+            return *this;
         }
+
+        // Postfix increment operator
+        Iterator operator++(int)
+        {
+            Iterator tmp = *this;
+            next();
+            return tmp;
+        }
+
+        Element * operator*()
+        {
+            return _current;
+        }
+
+        bool operator==(Iterator other)
+        {
+            return other._current == _current;
+        }
+
+        bool operator!=(Iterator other)
+        {
+            return other._current != _current;
+        }
+    };
+
+    Iterator begin()
+    {
+        Element *first = nullptr;
+        unsigned i = 0;
+        while (i < _size && _table[i] == nullptr)
+            ++i;
+        if (i < _size)
+            first = _table[i];
+        return Iterator(this, first);
     }
 
-    bool isEnd()
-    {
-        return _curr == nullptr;
-    }
-
-    HashMapElement<K, V> *getCurrent()
-    {
-        return _curr;
-    }
+    Iterator end() { return Iterator(this, nullptr); }
 };
 
 //====----------------------------------------------------------------------====
@@ -175,13 +191,13 @@ template <class K, class V, class F>
 void HashMap<K, V, F>::allocateTableAndMutexes(size_t size)
 {
     _size = size;
-    _table = new HashMapElement<K, V> *[_size];
+    _table = new Element *[_size];
     _mutexes = new std::mutex *[_size];
 
-    for (unsigned i = 0; i < _size; i++)
+    for (unsigned i = 0; i < _size; ++i)
         _mutexes[i] = new std::mutex;
 
-    for (unsigned i = 0; i < _size; i++)
+    for (unsigned i = 0; i < _size; ++i)
     {
         // Lock access to table elements at i.
         std::lock_guard<std::mutex> lock(*_mutexes[i]);
@@ -199,7 +215,7 @@ void HashMap<K, V, F>::destroyTableAndMutexes()
     if (_table == nullptr)
         return;
 
-    for (unsigned i = 0; i < _size; i++)
+    for (unsigned i = 0; i < _size; ++i)
     {
         {
             // Lock access to table elements at i.
@@ -208,11 +224,11 @@ void HashMap<K, V, F>::destroyTableAndMutexes()
             if (_table[i] == nullptr)
                 continue;
 
-            HashMapElement<K, V> *tmp = _table[i];
+            Element *tmp = _table[i];
 
             while (tmp != nullptr)
             {
-                HashMapElement<K, V> *old = tmp;
+                Element *old = tmp;
                 tmp = tmp->next;
                 delete old;
             }
@@ -240,7 +256,7 @@ HashMap<K, V, F>::HashMap(HashMap &other)
     allocateTableAndMutexes(other._size);
 
     // Insert elements from other
-    for (unsigned i = 0; i < other._size; i++)
+    for (unsigned i = 0; i < other._size; ++i)
     {
         // Lock access to table elements at i.
         std::lock_guard<std::mutex> lock(*other._mutexes[i]);
@@ -248,11 +264,11 @@ HashMap<K, V, F>::HashMap(HashMap &other)
         if (other._table[i] == nullptr)
             continue;
 
-        HashMapElement<K, V> *tmp = other._table[i];
+        Element *tmp = other._table[i];
 
         while (tmp != nullptr)
         {
-            insert(tmp->getKey(), tmp->getValue());
+            insert(tmp->key, tmp->value);
             tmp = tmp->next;
         }
     }
@@ -285,7 +301,7 @@ HashMap<K, V, F>& HashMap<K, V, F>::operator=(HashMap &other)
         allocateTableAndMutexes(other._size);
 
         // Insert elements from other
-        for (unsigned i = 0; i < other._size; i++)
+        for (unsigned i = 0; i < other._size; ++i)
         {
             // Lock access to table elements at i.
             std::lock_guard<std::mutex> lock(*other._mutexes[i]);
@@ -293,11 +309,11 @@ HashMap<K, V, F>& HashMap<K, V, F>::operator=(HashMap &other)
             if (other._table[i] == nullptr)
                 continue;
 
-            HashMapElement<K, V> *tmp = other._table[i];
+            Element *tmp = other._table[i];
 
             while (tmp != nullptr)
             {
-                insert(tmp->getKey(), tmp->getValue());
+                insert(tmp->key, tmp->value);
                 tmp = tmp->next;
             }
         }
@@ -337,12 +353,12 @@ HashMap<K, V, F>::~HashMap()
 template <class K, class V, class F>
 bool HashMap<K, V, F>::exists(K key)
 {
-    unsigned idx = hash(key);
-    // Lock access to table elements at idx.
-    std::lock_guard<std::mutex> lock(*_mutexes[idx]);
-    HashMapElement<K, V> *tmp = _table[idx];
+    unsigned i = hash(key);
+    // Lock access to table elements at i.
+    std::lock_guard<std::mutex> lock(*_mutexes[i]);
+    Element *tmp = _table[i];
 
-    while (tmp != nullptr && tmp->getKey() != key)
+    while (tmp != nullptr && tmp->key != key)
         tmp = tmp->next;
 
     return tmp != nullptr;
@@ -355,18 +371,18 @@ bool HashMap<K, V, F>::exists(K key)
 template <class K, class V, class F>
 V HashMap<K, V, F>::lookup(K key)
 {
-    unsigned idx = hash(key);
-    // Lock access to table elements at idx.
-    std::lock_guard<std::mutex> lock(*_mutexes[idx]);
-    HashMapElement<K, V> *tmp = _table[idx];
+    unsigned i = hash(key);
+    // Lock access to table elements at i.
+    std::lock_guard<std::mutex> lock(*_mutexes[i]);
+    Element *tmp = _table[i];
 
-    while (tmp != nullptr && tmp->getKey() != key)
+    while (tmp != nullptr && tmp->key != key)
         tmp = tmp->next;
 
     if (tmp == nullptr)
         throw std::out_of_range("HashMap: key doesn't exists");
 
-    return tmp->getValue();
+    return tmp->value;
 }
 
 //
@@ -375,30 +391,30 @@ V HashMap<K, V, F>::lookup(K key)
 template <class K, class V, class F>
 void HashMap<K, V, F>::insert(K key, V value)
 {
-    unsigned idx = hash(key);
-    // Lock access to table elements at idx.
-    std::lock_guard<std::mutex> lock(*_mutexes[idx]);
+    unsigned i = hash(key);
+    // Lock access to table elements at i.
+    std::lock_guard<std::mutex> lock(*_mutexes[i]);
 
-    if (_table[idx] == nullptr)
+    if (_table[i] == nullptr)
     {
-        _table[idx] = new HashMapElement<K, V>(key, value);
+        _table[i] = new Element(key, value);
     }
     else
     {
-        HashMapElement<K, V> *tmp = _table[idx];
+        Element *tmp = _table[i];
 
         // Traverse the list and check if a key already exists.
 
-        while (tmp->next != nullptr && tmp->getKey() != key)
+        while (tmp->next != nullptr && tmp->key != key)
             tmp = tmp->next;
 
         // If key exists, change the value, otherwise add new element to end of
         // list.
 
-        if (tmp->getKey() == key)
-            tmp->setValue(value);
+        if (tmp->key == key)
+            tmp->value = value;
         else
-            tmp->next = new HashMapElement<K, V>(key, value);
+            tmp->next = new Element(key, value);
     }
 }
 
@@ -409,13 +425,13 @@ void HashMap<K, V, F>::insert(K key, V value)
 template <class K, class V, class F>
 void HashMap<K, V, F>::remove(K key)
 {
-    unsigned idx = hash(key);
-    // Lock access to table elements at idx.
-    std::lock_guard<std::mutex> lock(*_mutexes[idx]);
-    HashMapElement<K, V> *tmp = _table[idx];
-    HashMapElement<K, V> *prev = nullptr;
+    unsigned i = hash(key);
+    // Lock access to table elements at i.
+    std::lock_guard<std::mutex> lock(*_mutexes[i]);
+    Element *tmp = _table[i];
+    Element *prev = nullptr;
 
-    while (tmp != nullptr && tmp->getKey() != key)
+    while (tmp != nullptr && tmp->key != key)
     {
         prev = tmp;
         tmp = tmp->next;
@@ -425,7 +441,7 @@ void HashMap<K, V, F>::remove(K key)
         throw std::out_of_range("HashMap: key doesn't exists");
 
     if (prev == nullptr)
-        _table[idx] = tmp->next;
+        _table[i] = tmp->next;
     else
         prev->next = tmp->next;
 
@@ -435,10 +451,10 @@ void HashMap<K, V, F>::remove(K key)
 template <class K, class V, class F>
 void HashMap<K, V, F>::resize(size_t newSize)
 {
-    HashMapElement<K, V> **newTable = new HashMapElement<K, V> *[newSize];
+    Element **newTable = new Element *[newSize];
 
     // Populate the new table.
-    for (unsigned i = 0; i < _size; i++)
+    for (unsigned i = 0; i < _size; ++i)
     {
         // Lock access to table elements at i.
         std::lock_guard<std::mutex> lock(*_mutexes[i]);
@@ -446,35 +462,33 @@ void HashMap<K, V, F>::resize(size_t newSize)
         if (_table[i] == nullptr)
             continue;
 
-        HashMapElement<K, V> *tmp = _table[i];
+        Element *tmp = _table[i];
 
         while (tmp != nullptr)
         {
-            HashMapElement<K, V> *old = tmp;
+            Element *old = tmp;
 
-            unsigned newIdx = hashFunctor(tmp->getKey()) % newSize;
+            unsigned newIdx = hashFunctor(tmp->key) % newSize;
             if (newTable[newIdx] == nullptr)
             {
-                newTable[newIdx] = new HashMapElement<K, V>(tmp->getKey(),
-                                                            tmp->getValue());
+                newTable[newIdx] = new Element(tmp->key, tmp->value);
             }
             else
             {
-                HashMapElement<K, V> *p = newTable[newIdx];
+                Element *p = newTable[newIdx];
 
                 // Traverse the list and check if a key already exists.
 
-                while (p->next != nullptr && p->getKey() != tmp->getKey())
+                while (p->next != nullptr && p->key != tmp->key)
                     p = p->next;
 
                 // If key exists, change the value, otherwise add new element to
                 // end of list.
 
-                if (p->getKey() == tmp->getKey())
-                    p->setValue(tmp->getValue());
+                if (p->key == tmp->key)
+                    p->value = tmp->value;
                 else
-                    p->next = new HashMapElement<K, V>(tmp->getKey(),
-                                                       tmp->getValue());
+                    p->next = new Element(tmp->key, tmp->value);
             }
 
             tmp = tmp->next;
@@ -500,21 +514,21 @@ void HashMap<K, V, F>::resize(size_t newSize)
 template <class K, class V, class F>
 void HashMap<K, V, F>::print()
 {
-    for (unsigned i = 0; i < _size; i++)
+    for (unsigned i = 0; i < _size; ++i)
     {
-        // Lock access to table elements at idx.
+        // Lock access to table elements at i.
         std::lock_guard<std::mutex> lock(*_mutexes[i]);
 
         if (_table[i] == nullptr)
             continue;
 
-        HashMapElement<K, V> *tmp = _table[i];
+        Element *tmp = _table[i];
 
         std::cout << "[" << i << "] -> ";
         while (tmp != nullptr)
         {
-            std::cout << "(" << tmp->getKey() << ", "
-                      << tmp->getValue() << "), ";
+            std::cout << "(" << tmp->key << ", "
+                      << tmp->value << "), ";
             tmp = tmp->next;
         }
         std::cout << "" << std::endl;

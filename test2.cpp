@@ -5,7 +5,7 @@
 #include "hashmap.h"
 
 constexpr unsigned MAX_TABLE_SIZE = 100;
-static constexpr unsigned HASH_CONST = 17;  /* A prime number */
+static constexpr unsigned HASH_CONST = 17;  // A prime number
 
 class IntHash
 {
@@ -27,7 +27,7 @@ public:
         while (it != key.end())
         {
             res += (unsigned) *it + HASH_CONST;
-            it++;
+            ++it;
         }
 
         return res;
@@ -49,14 +49,14 @@ void insert1(unsigned id)
     const unsigned n5 = 243+id;
     const unsigned n6 = 254+id;
 
-    for (unsigned i = 0; i < 10; i++)
+    for (unsigned i = 0; i < 10; ++i)
     {
-        im.insert(n1+i, "pineapple");
-        im.insert(n2+i, "mango");
-        im.insert(n3+i, "apple");
-        im.insert(n4+i, "orange");
-        im.insert(n5+i, "banana");
-        im.insert(n6+i, "kiwi");
+        im.insert(n1 + i, "pineapple");
+        im.insert(n2 + i, "mango");
+        im.insert(n3 + i, "apple");
+        im.insert(n4 + i, "orange");
+        im.insert(n5 + i, "banana");
+        im.insert(n6 + i, "kiwi");
 
         {
             std::lock_guard<std::mutex> lock(mtx);
@@ -64,7 +64,7 @@ void insert1(unsigned id)
 
             try
             {
-                val = im.lookup(n5+i);
+                val = im.lookup(n5 + i);
             }
             catch (std::out_of_range &e)
             {
@@ -75,7 +75,7 @@ void insert1(unsigned id)
 
             try
             {
-                val = im.lookup(n3+i);
+                val = im.lookup(n3 + i);
             }
             catch (std::out_of_range &e)
             {
@@ -86,7 +86,7 @@ void insert1(unsigned id)
 
             try
             {
-                im.remove(n5+i);
+                im.remove(n5 + i);
             }
             catch (std::out_of_range &e)
             {
@@ -97,7 +97,7 @@ void insert1(unsigned id)
 
             try
             {
-                im.remove(n2+i);
+                im.remove(n2 + i);
             }
             catch (std::out_of_range &e)
             {
@@ -108,7 +108,7 @@ void insert1(unsigned id)
 
             try
             {
-                im.remove(n3+i);
+                im.remove(n3 + i);
             }
             catch (std::out_of_range &e)
             {
@@ -129,7 +129,7 @@ void insert2(unsigned id)
     std::string key5 = "banana" + std::to_string(id);
     std::string key6 = "kiwi" + std::to_string(id);
 
-    for (unsigned i = 0; i < 10; i++)
+    for (unsigned i = 0; i < 10; ++i)
     {
         std::string key1i = key1 + std::to_string(i);
         std::string key2i = key2 + std::to_string(i);
@@ -241,6 +241,6 @@ int main()
 
     sm.print();
 
-    std::cout << "" << std::endl;
+    std::cout << std::endl;
     im.print();
 }

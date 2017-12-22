@@ -28,7 +28,7 @@ public:
         while (it != key.end())
         {
             res += (unsigned) *it + HASH_CONST;
-            it++;
+            ++it;
         }
 
         return res;
@@ -49,32 +49,34 @@ int main()
 
     for (unsigned i = 0; i < 10; i++)
     {
-        imap.insert(n1+i, "pineapple");
-        imap.insert(n2+i, "mango");
-        imap.insert(n3+i, "apple");
-        imap.insert(n4+i, "orange");
-        imap.insert(n5+i, "banana");
-        imap.insert(n6+i, "kiwi");
+        imap.insert(n1 + i, "pineapple");
+        imap.insert(n2 + i, "mango");
+        imap.insert(n3 + i, "apple");
+        imap.insert(n4 + i, "orange");
+        imap.insert(n5 + i, "banana");
+        imap.insert(n6 + i, "kiwi");
     }
 
-    HashMapIter<unsigned, std::string, IntHash> *imIter = imap.createIterator();
+    // Test iterator
 
-    imIter->first();
+    HashMap<unsigned, std::string, IntHash>::Iterator imIter = imap.begin();
 
-    while (!imIter->isEnd())
+    while (imIter != imap.end())
     {
-        std::cout << imIter->getCurrent()->getValue() << std::endl;
-        imIter->next();
+        std::cout << (*imIter)->value << std::endl;
+        ++imIter;
     }
 
     std::cout << "===================================" << std::endl;
 
-    imIter->first();
+    imIter = imap.begin();
 
-    while (!imIter->isEnd())
+    while (imIter != imap.end())
     {
-        std::cout << imIter->getCurrent()->getValue() << std::endl;
-        imIter->next();
+        HashMap<unsigned, std::string, IntHash>::Element *e = (*imIter);
+        std::cout << "key   == " << e->key << std::endl;
+        std::cout << "value == " << e->value << std::endl;
+        imIter++;
     }
 
     // Test move constructor

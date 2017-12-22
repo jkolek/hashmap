@@ -4,7 +4,7 @@
 #include "hashmap.h"
 
 constexpr unsigned MAX_TABLE_SIZE = 100;
-static constexpr unsigned hashConst = 17; /* A prime number */
+static constexpr unsigned hashConst = 17; // A prime number
 
 class UnsignedHash
 {
@@ -53,7 +53,7 @@ int main()
 
     try
     {
-        /* Try to lookup non-existing key. */
+        // Try to lookup non-existing key
         umap.lookup(30);
     }
     catch (std::out_of_range &e)
@@ -65,7 +65,7 @@ int main()
 
     try
     {
-        /* Try to remove non-existing key. */
+        // Try to remove non-existing key
         umap.remove(60);
     }
     catch (std::out_of_range &e)
