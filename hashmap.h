@@ -24,8 +24,9 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
-#include <stdexcept>
+#include <iostream>
 #include <mutex>
+#include <stdexcept>
 
 template <class K, class V, class F>
 class HashMap
